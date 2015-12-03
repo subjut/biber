@@ -5,6 +5,8 @@ use utf8;
 no warnings 'utf8';
 
 use Test::More tests => 4;
+use Test::Differences;
+unified_diff;
 
 use Biber;
 use Biber::Output::bbl;
@@ -25,8 +27,8 @@ my $l4pconf = qq|
 |;
 Log::Log4perl->init(\$l4pconf);
 
+Biber::Config->setoption('sortlocale', 'en_GB.UTF-8');
 Biber::Config->setoption('fastsort', 1);
-Biber::Config->setoption('sortlocale', 'C');
 $biber->parse_ctrlfile("general1.bcf");
 $biber->set_output_obj(Biber::Output::bbl->new());
 
@@ -48,7 +50,7 @@ Biber::Config->setblxoption('labelnamespec', [ {content => 'namea'},
 $biber->prepare;
 my $bibentries = $biber->sections->get_section(0)->bibentries;
 
-is($bibentries->entry('angenendtsa')->get_labelname_info->{field}, 'shortauthor', 'global shortauthor' );
-is($bibentries->entry('stdmodel')->get_labelname_info->{field}, 'author', 'global author' );
-is($bibentries->entry('aristotle:anima')->get_labelname_info->{field}, 'editor', 'type-specific editor' );
-is($bibentries->entry('lne1')->get_labelname_info->{field}, 'namea', 'type-specific exotic name' );
+eq_or_diff($bibentries->entry('angenendtsa')->get_labelname_info, 'shortauthor', 'global shortauthor' );
+eq_or_diff($bibentries->entry('stdmodel')->get_labelname_info, 'author', 'global author' );
+eq_or_diff($bibentries->entry('aristotle:anima')->get_labelname_info, 'editor', 'type-specific editor' );
+eq_or_diff($bibentries->entry('lne1')->get_labelname_info, 'namea', 'type-specific exotic name' );

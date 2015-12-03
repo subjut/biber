@@ -177,12 +177,8 @@ sub new {
 sub is_field {
   my $self = shift;
   my $field = shift;
-  my $S = Biber::Config->getoption('mssplit');
   if ($field =~ m/^BIBERCUSTOM/o) {
     return 1;
-  }
-  elsif ($field =~ m/^([^$S]+)$S(?:original|translated|romanised|uniform)$S?.*$/) {
-    return $self->{fieldsbyname}{$1} ? 1 : 0;
   }
   else {
     return $self->{fieldsbyname}{$field} ? 1 : 0;
@@ -411,7 +407,9 @@ sub check_mandatory_constraints {
         my $flag = 0;
         my $xorflag = 0;
         foreach my $of (@fs) {
-          if ($be->field_exists($of)) {
+          if ($be->field_exists($of) and
+              # ignore date field if it has been split into parts
+              not ($of eq 'date' and $be->get_field('datesplit'))) {
             if ($xorflag) {
               push @warnings, "Datamodel: Entry '$key' ($ds): Mandatory fields - only one of '" . join(', ', @fs) . "' must be defined - ignoring field '$of'";
               $be->del_field($of);
@@ -536,10 +534,14 @@ sub check_data_constraints {
     if ($c->{datatype} eq 'isbn') {
       foreach my $f (@{$c->{fields}}) {
         if (my $fv = $be->get_field($f)) {
-          (my $vol, my $dir, undef) = File::Spec->splitpath( $INC{"Biber.pm"} );
-          $dir =~ s/\/$//; # splitpath sometimes leaves a trailing '/'
-          $ENV{ISBN_RANGE_MESSAGE} = File::Spec->catpath($vol, "$dir/Business/ISBN/", 'RangeMessage.xml');
           require Business::ISBN;
+          my ($vol, $dir, undef) = File::Spec->splitpath( $INC{"Business/ISBN.pm"} );
+          $dir =~ s/\/$//; # splitpath sometimes leaves a trailing '/'
+          # Just in case it is already set. We also need to fake this in tests or it will
+          # look for it in the blib dir
+          unless (exists($ENV{ISBN_RANGE_MESSAGE})) {
+            $ENV{ISBN_RANGE_MESSAGE} = File::Spec->catpath($vol, "$dir/ISBN/", 'RangeMessage.xml');
+          }
           # Treat as a list field just in case someone has made it so in a custom datamodel
           unless ($self->get_fieldtype($f) eq 'list') {
             $fv = [$fv];
@@ -719,7 +721,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

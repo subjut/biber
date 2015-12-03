@@ -21,7 +21,10 @@ use Biber::LaTeX::Recode;
 use Biber::Entry::Name;
 use Regexp::Common qw( balanced );
 use Log::Log4perl qw(:no_extra_logdie_message);
+use Scalar::Util qw(looks_like_number);
+use Text::Roman qw(isroman roman2int);
 use Unicode::Normalize;
+use Unicode::GCString;
 my $logger = Log::Log4perl::get_logger('main');
 
 =encoding utf-8
@@ -45,7 +48,7 @@ our @EXPORT = qw{ locate_biber_file makenamesid makenameid stringify_hash
   is_undef_or_null is_notnull is_null normalise_utf8 inits join_name latex_recode_output
   filter_entry_options biber_error biber_warn ireplace imatch validate_biber_xml
   process_entry_options escape_label unescape_label biber_decode_utf8 out parse_date
-  locale2bcp47 bcp472locale};
+  locale2bcp47 bcp472locale rangelen match_indices process_comment};
 
 =head1 FUNCTIONS
 
@@ -268,19 +271,27 @@ sub strip_nosort {
 
 =head2 normalise_string_label
 
-Remove some things from a string for label generation, like braces.
-It also decodes LaTeX character macros into Unicode as this is always safe when
-normalising strings for sorting since they don't appear in the output.
+Remove some things from a string for label generation.
 
 =cut
 
 sub normalise_string_label {
   my $str = shift;
-  my $fieldname = shift;
   return '' unless $str; # Sanitise missing data
-  return normalise_string_common($str);
+  my $nolabels = Biber::Config->getoption('nolabel');
+  $str =~ s/\\[A-Za-z]+//g;        # remove latex macros (assuming they have only ASCII letters)
+  # Replace ties with spaces or they will be lost
+  $str =~ s/([^\\])~/$1 /g; # Foo~Bar -> Foo Bar
+  foreach my $nolabel (@$nolabels) {
+    my $nlopt = $nolabel->{value};
+    my $re = qr/$nlopt/;
+    $str =~ s/$re//gxms;           # remove nolabel items
+  }
+  $str =~ s/^\s+//;                # Remove leading spaces
+  $str =~ s/\s+$//;                # Remove trailing spaces
+  $str =~ s/\s+/ /g;               # collapse spaces
+  return $str;
 }
-
 
 =head2 normalise_string_sort
 
@@ -931,6 +942,23 @@ sub _expand_option {
   return;
 }
 
+=head2 process_comment
+
+  Fix up some problems with comments after being processed by btparse
+
+=cut
+
+sub process_comment {
+  my $comment = shift;
+  # Fix up structured Jabref comments by re-instating line breaks. Hack.
+  if ($comment =~ m/jabref-meta:/) {
+    $comment =~ s/([:;])\s(\d)/$1\n$2/xmsg;
+    $comment =~ s/\z/\n/xms;
+  }
+  return $comment;
+}
+
+
 =head2 locale2bcp47
 
   Map babel/polyglossia language options to a sensible CLDR (bcp47) locale default
@@ -957,6 +985,96 @@ sub bcp472locale {
   return $LOCALE_MAP_R{$localestr} || $localestr;
 }
 
+=head2 rangelen
+
+  Calculate the length of a range field
+  Range fields are an array ref of two-element array refs [range_start, range_end]
+  range_end can be be empty for open-ended range or undef
+  Deals with Unicode and ASCII roman numerals via the magic of Unicode NFKD form
+
+  m-n -> [m, n]
+  m   -> [m, undef]
+  m-  -> [m, '']
+  -n  -> ['', n]
+  -   -> ['', undef]
+
+=cut
+
+sub rangelen {
+  my $rf = shift;
+  my $rl = 0;
+  foreach my $f (@$rf) {
+    my $m = $f->[0];
+    my $n = $f->[1];
+    # m is something that's just numerals (decimal Unicode roman or ASCII roman)
+    if ($m and $m =~ /^[\p{Nd}\p{Nl}iIvVxXlLcCdDmM]+$/) {
+      # This magically decomposes Unicode roman chars into ASCII compat
+      $m = NFKD($m);
+      # n is something that's just numerals (decimal Unicode roman or ASCII roman)
+      if ($n and $n =~ /^[\p{Nd}\p{Nl}iIvVxXlLcCdDmM]+$/) {
+        # This magically decomposes Unicode roman chars into ASCII compat
+        $n = NFKD($n);
+        $m = isroman($m) ? roman2int($m) : $m;
+        $n = isroman($n) ? roman2int($n) : $n;
+        # If still not an int at this point, it's probably some non-int page number that
+        # isn't a roman numeral so give up
+        unless (looks_like_number($n) and looks_like_number($m)) {
+          return -1;
+        }
+        # Deal with not so explicit ranges like 22-4 or 135-38
+        # Done by turning numbers into string arrays, reversing and then filling in blanks
+        if ($n < $m) {
+          my @m = reverse split(//,$m);
+          my @n = reverse split(//,$n);
+          for (my $i=0;$i<=$#m;$i++) {
+            next if $n[$i];
+            $n[$i] = $m[$i];
+          }
+          $n = join('', reverse @n);
+        }
+        $rl += (($n - $m) + 1);
+      }
+      # n is ''
+      elsif (defined($n)) {
+        # open-ended range can't be calculated, just return -1
+        return -1;
+      }
+      # n is undef, single item
+      else {
+        $rl += 1;
+      }
+    }
+    else {
+      # open-ended range can't be calculated, just return -1
+      return -1;
+    }
+  }
+  return $rl;
+}
+
+
+=head2 match_indices
+
+  Return array ref of array refs of matches and start indices of matches
+  for provided array of compiled regexps into string
+
+=cut
+
+sub match_indices {
+  my ($regexes, $string) = @_;
+  my $ret;
+  my $relen = 0;
+  foreach my $regex (@$regexes) {
+    my $len = 0;
+    while ($string =~ /$regex/g) {
+      my $gcs = Unicode::GCString->new($string)->substr($-[0], $+[0]-$-[0]);
+      push @$ret, [ $gcs->as_string, $-[0] - $relen ];
+      $len = $gcs->length;
+    }
+    $relen += $len;
+  }
+  return $ret
+}
 
 1;
 
@@ -974,7 +1092,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

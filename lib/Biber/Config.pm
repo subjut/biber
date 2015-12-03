@@ -3,12 +3,15 @@ use v5.16;
 
 use Biber;
 use Biber::Constants;
+use Biber::Utils;
 use IPC::Cmd qw( can_run );
 use IPC::Run3; # This works with PAR::Packer and Windows. IPC::Run doesn't
 use Cwd qw( abs_path );
 use Data::Compare;
 use Data::Dump;
 use Encode;
+use File::Slurp;
+use File::Spec;
 use Carp;
 use List::AllUtils qw(first max);
 use Log::Log4perl qw( :no_extra_logdie_message ); # To keep PAR::Packer happy, explicitly load these
@@ -18,7 +21,7 @@ use Log::Log4perl::Layout::SimpleLayout;
 use Log::Log4perl::Layout::PatternLayout;
 use Unicode::Normalize;
 
-our $VERSION = '1.9';
+our $VERSION = '2.2';
 our $BETA_VERSION = 0; # Is this a beta version?
 
 our $logger  = Log::Log4perl::get_logger('main');
@@ -172,14 +175,11 @@ sub _initopts {
     elsif (lc($k) eq 'dot_include' or
            lc($k) eq 'collate_options' or
            lc($k) eq 'nosort' or
+           lc($k) eq 'nolabel' or
+           lc($k) eq 'nolabelwidthcount' or
            lc($k) eq 'noinit' ) {
       Biber::Config->setoption($k, $v->{option});
     }
-  }
-
-  # Set hard-coded biblatex option defaults
-  foreach (keys %CONFIG_DEFAULT_BIBLATEX) {
-    Biber::Config->setblxoption($_, $CONFIG_DEFAULT_BIBLATEX{$_});
   }
 
   # There is a special default config file for tool mode
@@ -192,6 +192,13 @@ sub _initopts {
 
   # Normal user config file - overrides tool mode defaults, if any
   _config_file_set($opts->{configfile});
+
+  # Set hard-coded biblatex option defaults
+  # This has to go after _config_file_set() as this is what defines option scope
+  # in tool mode (from the .conf file)
+  foreach (keys %CONFIG_DEFAULT_BIBLATEX) {
+    Biber::Config->setblxoption($_, $CONFIG_DEFAULT_BIBLATEX{$_});
+  }
 
   # Command-line overrides everything else
   foreach my $copt (keys %$opts) {
@@ -368,20 +375,30 @@ sub _config_file_set {
                                                             qr/\Asort\z/,
                                                             qr/\Asortitem\z/,
                                                             qr/\Apresort\z/,
+                                                            qr/\Aoptionscope\z/,
                                                            ],
                                            'NsStrip' => 1,
                                            'KeyAttr' => []) or
                                              croak("Failed to read biber config file '$conf'\n $@");
   }
+  # Option scope has to be set first
+  foreach my $bcfscopeopts (@{$userconf->{optionscope}}) {
+    my $type = $bcfscopeopts->{type};
+    foreach my $bcfscopeopt (@{$bcfscopeopts->{option}}) {
+      $CONFIG_SCOPE_BIBLATEX{$bcfscopeopt->{content}}{$type} = 1;
+    }
+  }
+  delete $userconf->{optionscope};
 
-  # Set options from config file.
+  # Set options from config file
   while (my ($k, $v) = each %$userconf) {
     if (exists($v->{content})) { # simple option
       Biber::Config->setconfigfileoption($k, $v->{content});
     }
     # mildly complex options - nosort/collate_options
     elsif (lc($k) eq 'nosort' or
-           lc($k) eq 'noinit' ) {
+           lc($k) eq 'noinit' or
+           lc($k) eq 'nolabel' ) {
       Biber::Config->setconfigfileoption($k, $v->{option});
     }
     # rather complex options
@@ -562,7 +579,7 @@ sub postprocess_biber_opts {
       }
       unless ($CONFIG->{options}{biber}{$opt} eq '1' or
               $CONFIG->{options}{biber}{$opt} eq '0') {
-        biber_error("Invalid value for option '$opt'");
+        Biber::Utils::biber_error("Invalid value for option '$opt'");
       }
     }
   }
@@ -665,6 +682,12 @@ sub setconfigfileoption {
   my ($opt, $val) = @_;
   # Config file options are also options ...
   $CONFIG->{options}{biber}{$opt} = $CONFIG->{configfileoptions}{$opt} = $val;
+
+  # Config file options can also be global biblatex options
+  if ($CONFIG_SCOPE_BIBLATEX{$opt}) {
+    $CONFIG->{options}{biblatex}{GLOBAL}{$opt} = $val;
+  }
+
   return;
 }
 
@@ -1777,7 +1800,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

@@ -38,12 +38,38 @@ sub set_output_target_file {
   my $self = shift;
   my $outfile = shift;
   $self->{output_target_file} = $outfile;
-  my $enc_out;
-  if (Biber::Config->getoption('output_encoding')) {
-    $enc_out = ':encoding(' . Biber::Config->getoption('output_encoding') . ')';
+}
+
+=head2 set_output_comment
+
+  Set the output for a comment
+
+=cut
+
+sub set_output_comment {
+  my $self = shift;
+  my $comment = shift;
+  my $acc = '';
+
+  # Make the right casing function
+  my $casing;
+
+  if (Biber::Config->getoption('output_fieldcase') eq 'upper') {
+    $casing = sub {uc(shift)};
   }
-  my $TOOLFILE = IO::File->new($outfile, ">$enc_out");
-  $self->set_output_target($TOOLFILE);
+  elsif (Biber::Config->getoption('output_fieldcase') eq 'lower') {
+    $casing = sub {lc(shift)};
+  }
+  elsif (Biber::Config->getoption('output_fieldcase') eq 'title') {
+    $casing = sub {ucfirst(shift)};
+  }
+
+  $acc .= '@';
+  $acc .= $casing->('comment');
+  $acc .= "{$comment}\n";
+
+  push @{$self->{output_data}{COMMENTS}}, $acc;
+  return;
 }
 
 =head2 set_output_entry
@@ -64,21 +90,15 @@ sub set_output_entry {
 
   # Make the right casing function
   my $casing;
-  my $mss = Biber::Config->getoption('mssplit');
+
   if (Biber::Config->getoption('output_fieldcase') eq 'upper') {
-    $casing = sub {my $s = shift;
-                   my @s = split(/$mss/, $s);
-                   join($mss, uc(shift(@s)), @s)};
+    $casing = sub {uc(shift)};
   }
   elsif (Biber::Config->getoption('output_fieldcase') eq 'lower') {
-    $casing = sub {my $s = shift;
-                   my @s = split(/$mss/, $s);
-                   join($mss, lc(shift(@s)), @s)};
+    $casing = sub {lc(shift)};
   }
   elsif (Biber::Config->getoption('output_fieldcase') eq 'title') {
-    $casing = sub {my $s = shift;
-                   my @s = split(/$mss/, $s);
-                   join($mss, ucfirst(shift(@s)), @s)};
+    $casing = sub {ucfirst(shift)};
   }
 
   $acc .= '@';
@@ -151,11 +171,19 @@ sub set_output_entry {
 sub output {
   my $self = shift;
   my $data = $self->{output_data};
-  my $target = $self->{output_target};
+
   my $target_string = "Target"; # Default
   if ($self->{output_target_file}) {
     $target_string = $self->{output_target_file};
   }
+
+  # Instantiate output file now that input is read in case we want to do in-place
+  # output for tool mode
+  my $enc_out;
+  if (Biber::Config->getoption('output_encoding')) {
+    $enc_out = ':encoding(' . Biber::Config->getoption('output_encoding') . ')';
+  }
+  my $target = IO::File->new($target_string, ">$enc_out");
 
   # for debugging mainly
   unless ($target) {
@@ -174,6 +202,13 @@ sub output {
   # Bibtex output uses just one special section, always sorted by global sorting spec
   foreach my $key ($Biber::MASTER->sortlists->get_list(99999, Biber::Config->getblxoption('sortscheme'), 'entry', Biber::Config->getblxoption('sortscheme'))->get_keys) {
     out($target, ${$data->{ENTRIES}{99999}{index}{$key}});
+  }
+
+  # Output any comments when in tool mode
+  if (Biber::Config->getoption('tool')) {
+    foreach my $comment (@{$data->{COMMENTS}}) {
+      out($target, $comment);
+    }
   }
 
   out($target, $data->{TAIL});
@@ -195,12 +230,16 @@ sub create_output_section {
   my $secnum = $Biber::MASTER->get_current_section;
   my $section = $Biber::MASTER->sections->get_section($secnum);
 
-
-  # We rely on the order of this array for the order of the .bbl
+  # We rely on the order of this array for the order of the .bib
   foreach my $k ($section->get_citekeys) {
     # Regular entry
     my $be = $section->bibentry($k) or biber_error("Cannot find entry with key '$k' to output");
     $self->set_output_entry($be, $section, Biber::Config->get_dm);
+  }
+
+  # Output all comments at the end
+  foreach my $comment (@{$Biber::MASTER->{comments}}) {
+    $self->set_output_comment($comment);
   }
 
   # Make sure the output object knows about the output section
@@ -226,7 +265,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

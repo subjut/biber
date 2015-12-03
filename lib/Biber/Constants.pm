@@ -27,9 +27,9 @@ our @EXPORT = qw{
 
 # Version of biblatex control file which this release expects. Matched against version
 # passed in control file. Used when checking the .bcf
-our $BCF_VERSION = '2.6';
+our $BCF_VERSION = '2.8';
 # Format version of the .bbl. Used when writing the .bbl
-our $BBL_VERSION = '2.4';
+our $BBL_VERSION = '2.5';
 
 # Global flags needed for sorting
 our $BIBER_SORT_FINAL = 0;
@@ -96,7 +96,7 @@ our %DM_DATATYPES = (
 our $CONFIG_DEFAULT_BIBER = {
   clrmacros           => { content => 0 },
   collate             => { content => 1 },
-  collate_options     => { option => { level => 4, variable => 'non-ignorable', normalization => 'prenormalized' }},
+  collate_options     => { option => {level => 4, variable => 'non-ignorable', normalization => 'prenormalized' }},
   graph               => { content => 0 },
   debug               => { content => 0 },
   decodecharsset      => { content => 'base' },
@@ -105,13 +105,17 @@ our $CONFIG_DEFAULT_BIBER = {
   fixinits            => { content => 0 },
   input_encoding      => { content => 'UTF-8' },
   input_format        => { content => 'bibtex' },
+  isbn10              => { content => 0 },
+  isbn13              => { content => 0 },
+  isbn_normalise      => { content => 0 },
   listsep             => { content => 'and' },
   mincrossrefs        => { content => 2 },
-  mssplit             => { content => '_' },
   namesep             => { content => 'and' },
   nodieonerror        => { content => 0 },
   noinit              => { option => [ {value => q/\b\p{Ll}{2}\p{Pd}/},
                                        {value => q/[\x{2bf}\x{2018}]/} ] },
+  nolabel             => { option => [ {value => q/[\p{P}\p{S}\p{C}]+/} ] },
+  nolabelwidthcount   => { option => [ {value => q//} ] },
   nolog               => { content => 0 },
   nostdmacros         => { content => 0 },
   nosort              => { option => [ { name => 'type_name', value => q/\A\p{L}{2}\p{Pd}/ },
@@ -127,6 +131,7 @@ our $CONFIG_DEFAULT_BIBER = {
   output_safechars    => { content => 0 },
   output_safecharsset => { content => 'base' },
   quiet               => { content => 0 },
+  noskipduplicates    => { content => 0 },
   sortcase            => { content => 1 },
   sortfirstinits      => { content => 0 },
   sortupper           => { content => 1 },
@@ -144,8 +149,20 @@ our $CONFIG_DEFAULT_BIBER = {
 # * Some tool-mode defaults (as there is no .bcf and some biblatex options
 #   cannot be set in a biber config file)
 our %CONFIG_DEFAULT_BIBLATEX = (
-  sortscheme => 'none',
-);
+                                sortscheme    => 'none',
+                                useauthor     => 1,
+                                useeditor     => 1,
+                                usetranslator => 1,
+                                maxbibnames   => 100,
+                                maxitems      => 100,
+                                minbibnames   => 100,
+                                maxalphanames => 100,
+                                maxcitenames  => 100,
+                                minalphanames => 100,
+                                mincitenames  => 100,
+                                minitems      => 100,
+                                useprefix     => 0
+                               );
 
 # Set up some encoding aliases to map \inputen{c,x} encoding names to Encode
 # It seems that inputen{c,x} has a different idea of nextstep than Encode
@@ -162,7 +179,7 @@ define_alias('x-ascii'        => 'ascii'); # Encode doesn't resolve this one by 
 define_alias('lutf8'          => 'UTF-8'); # Luatex
 define_alias('utf8x'          => 'UTF-8'); # UCS (old)
 
-# Defines sensible defaults for setting sort locale (bcp47) from babel/polyglossia language names
+# maps between bcp47 lang/locales and babel/polyglossia language names
 our %LOCALE_MAP = (
                    'acadian'         => 'fr-CA',
                    'american'        => 'en-US',
@@ -187,7 +204,7 @@ our %LOCALE_MAP = (
                    'bulgarian'       => 'bg-BG',
                    'canadian'        => 'en-CA',
                    'canadien'        => 'fr-CA',
-                   'catalan'         => 'ca-ES',
+                   'catalan'         => 'ca-AD',
                    'coptic'          => 'cop',
                    'croatian'        => 'hr-HR',
                    'czech'           => 'cs-CZ',
@@ -236,6 +253,7 @@ our %LOCALE_MAP = (
                    'ngerman'         => 'de-DE',
                    'nko'             => 'ha-NG',
                    'norsk'           => 'nb-NO',
+                   'norwegian'       => 'nn-NO',
                    'nynorsk'         => 'nn-NO',
                    'occitan'         => 'oc-FR',
                    'piedmontese'     => 'pms-IT',
@@ -257,6 +275,9 @@ our %LOCALE_MAP = (
                    'slovenian'       => 'sl-SI',
                    'spanish'         => 'es-ES',
                    'swedish'         => 'sv-SE',
+                   'swiss'           => 'de-CH',
+                   'swissgerman'     => 'de-CH',
+                   'nswissgerman'    => 'de-CH',
                    'syriac'          => 'syc',
                    'tamil'           => 'ta-IN',
                    'telugu'          => 'te-IN',
@@ -267,7 +288,7 @@ our %LOCALE_MAP = (
                    'turkmen'         => 'tk-TM',
                    'ukrainian'       => 'uk-UA',
                    'urdu'            => 'ur-IN',
-                   'UKenglish'       => 'en-GB',
+                   'UKenglish'       => 'en-UK',
                    'uppersorbian'    => 'hsb-DE',
                    'USenglish'       => 'en-US',
                    'usorbian'        => 'hsb-DE',
@@ -293,6 +314,7 @@ our %LOCALE_MAP_R = (
                      'br'         => 'breton',
                      'br-FR'      => 'breton',
                      'ca'         => 'catalan',
+                     'ca-AD'      => 'catalan',
                      'ca-ES'      => 'catalan',
                      'cop'        => 'coptic',
                      'cs'         => 'czech',
@@ -304,6 +326,8 @@ our %LOCALE_MAP_R = (
                      'de-1996'    => 'ngerman',
                      'de-AT'      => 'austrian',
                      'de-AT-1996' => 'naustrian',
+                     'de-CH'      => 'swissgerman',
+                     'de-CH-1996' => 'nswissgerman',
                      'de-DE'      => 'german',
                      'de-DE-1996' => 'ngerman',
                      'dsb'        => 'lowersorbian',
@@ -316,7 +340,7 @@ our %LOCALE_MAP_R = (
                      'en'         => 'english',
                      'en-AU'      => 'australian',
                      'en-CA'      => 'canadian',
-                     'en-GB'      => 'UKenglish',
+                     'en-UK'      => 'UKenglish',
                      'en-GB'      => 'british',
                      'en-NZ'      => 'newzealand',
                      'en-US'      => 'USenglish',
@@ -439,58 +463,8 @@ our %LOCALE_MAP_R = (
                      'vi-VN'      => 'vietnamese',
                     );
 
-# Defines the scope of each of the BibLaTeX configuration options
-#
-# PRESORT is not a "real" biblatex option passed by biblatex. It is defined
-# by the biblatex \DeclarePresort macro and is stored in here as it
-# can be global/per-type or per-entry and therefore it's natural to store it here.
-our %CONFIG_SCOPE_BIBLATEX = (
-  alphaothers        => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  controlversion     => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  debug              => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  datamodel          => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  dataonly           => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  inheritance        => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  labelalpha         => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labelalphatemplate => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labelnamefield     => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labelnameform      => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labelnamelang      => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labelnamespec      => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labelnumber        => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labeltitle         => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labeltitlefield    => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labeltitleform     => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labeltitlelang     => {GLOBAL => 0, PER_TYPE => 0, PER_ENTRY => 1},
-  labeltitlespec     => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labeltitleyear     => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labeldate          => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  labeldatespec      => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  maxalphanames      => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  maxbibnames        => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  maxcitenames       => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  maxitems           => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  minalphanames      => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  minbibnames        => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  mincitenames       => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  minitems           => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  presort            => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  singletitle        => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  skipbib            => {GLOBAL => 0, PER_TYPE => 1, PER_ENTRY => 1},
-  skipbiblist        => {GLOBAL => 0, PER_TYPE => 1, PER_ENTRY => 1},
-  skiplab            => {GLOBAL => 0, PER_TYPE => 1, PER_ENTRY => 1},
-  sortalphaothers    => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 0},
-  sortexclusion      => {GLOBAL => 0, PER_TYPE => 1, PER_ENTRY => 0},
-  sorting            => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  sortlocale         => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  sortscheme         => {GLOBAL => 1, PER_TYPE => 0, PER_ENTRY => 0},
-  uniquelist         => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  uniquename         => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  useauthor          => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  useeditor          => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  useprefix          => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-  usetranslator      => {GLOBAL => 1, PER_TYPE => 1, PER_ENTRY => 1},
-);
+# Holds the scope of each of the BibLaTeX configuration options fro the .bcf
+our %CONFIG_SCOPE_BIBLATEX;
 
 # For per-entry options, what should be set when we find them and
 # what should be output to the .bbl for biblatex.
@@ -548,7 +522,7 @@ L<https://github.com/plk/biber/issues>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 This module is free software.  You can redistribute it and/or
 modify it under the terms of the Artistic License 2.0.

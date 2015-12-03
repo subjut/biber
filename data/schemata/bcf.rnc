@@ -47,10 +47,8 @@ start =
       sortscheme,
       uniquelist,
       uniquename,
-      useauthor,
-      useeditor,
       useprefix,
-      usetranslator
+      usenames
     },
     
     # Per-entrytype BibLaTeX options
@@ -76,16 +74,21 @@ start =
       singletitle?,
       skipbib?,
       skiplab?,
+      skipbiblist?,
       skiplos?,
       sortalphaothers?,
       uniquelist?,
       uniquename?,
-      useauthor?,
-      useeditor?,
       useprefix?,
-      usetranslator?
+      usenames?
     }*,
 
+    # Option scope
+    element bcf:optionscope {
+      attribute type { "GLOBAL" | "PER_TYPE" | "PER_ENTRY" },
+      element bcf:option { xsd:string }+
+    }+,
+    
     # user field/entrytype mapping
     element bcf:sourcemap {
       element bcf:maps {
@@ -162,6 +165,13 @@ start =
     # noinit specification
     element bcf:noinits {
       element bcf:noinit {
+        attribute value { xsd:string },
+        empty
+      }+
+    }?,
+    # nolabel specification
+    element bcf:nolabels {
+      element bcf:nolabel {
         attribute value { xsd:string },
         empty
       }+
@@ -282,7 +292,7 @@ listspec =
       attribute sortscheme { xsd:string {minLength="1"}},
       # name is only needed for list types
       attribute name { xsd:string {minLength="1"}},
-      (filter | orfilter )*,
+      (filter | filteror )*,
       element bcf:sorting {
         # locale for entire sorting specification
         attribute locale { xsd:string {minLength="1"}}?,
@@ -363,7 +373,7 @@ secspec =
     }*
   }
 
-orfilter = element bcf:orfilter {
+filteror = element bcf:filteror {
              filter+
            }
 
@@ -374,28 +384,17 @@ filter = element bcf:filter {
          }
 
 # option definitions
+# use<name> options are dynamically determined from data model
+usenames =
+  element bcf:option {
+    attribute type { "singlevalued" },
+    element bcf:key { xsd:string {pattern = "use.*"} },
+    element bcf:value { "0" | "1" }
+  }+
 useprefix =
   element bcf:option {
     attribute type { "singlevalued" },
     element bcf:key { "useprefix" },
-    element bcf:value { "0" | "1" }
-  }
-useauthor =
-  element bcf:option {
-    attribute type { "singlevalued" },
-    element bcf:key { "useauthor" },
-    element bcf:value { "0" | "1" }
-  }
-useeditor =
-  element bcf:option {
-    attribute type { "singlevalued" },
-    element bcf:key { "useeditor" },
-    element bcf:value { "0" | "1" }
-  }
-usetranslator =
-  element bcf:option {
-    attribute type { "singlevalued" },
-    element bcf:key { "usetranslator" },
     element bcf:value { "0" | "1" }
   }
 labelalpha =
@@ -465,6 +464,12 @@ skiplos =
   element bcf:option {
     attribute type { "singlevalued" },
     element bcf:key { "skiplos" },
+    element bcf:value { "0" | "1" }
+  }
+skipbiblist =
+  element bcf:option {
+    attribute type { "singlevalued" },
+    element bcf:key { "skipbiblist" },
     element bcf:value { "0" | "1" }
   }
 # 0 = do not provide uniquelist information
@@ -662,7 +667,7 @@ map =
       empty
     }+
   }
-# Copyright 2009-2014 François Charette and Philip Kime, all rights reserved.
+# Copyright 2009-2015 François Charette and Philip Kime, all rights reserved.
 
 # This code is free software.  You can redistribute it and/or
 # modify it under the terms of the Artistic License 2.0.
